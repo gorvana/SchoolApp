@@ -2,9 +2,7 @@ from flask import Flask, render_template, request, jsonify
 import bcrypt
 import mysql.connector
 
-app = Flask(__name__)  
-
-def password_hash()
+app = Flask(__name__)  s
 
 def connection():
     cnx = mysql.connector.connect(
