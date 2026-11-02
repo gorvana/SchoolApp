@@ -21,3 +21,25 @@ $(document).ready(function(){
         }
     })
 })
+
+$(document).ready(function(){
+    $('.login-card form').on('submit', function(e){
+        e.preventDefault();
+
+        $.ajax({
+            url: '/user_login',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                email: $('#username').val(),
+                password: $('#password').val()
+            }),
+            success: function(response){
+                alert(response.message);
+            },
+            error: function(xhr){
+                alert(xhr.responseJSON.message);
+            }
+        });
+    });
+});

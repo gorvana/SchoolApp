@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, jsonify
 import bcrypt
 import mysql.connector
 
-app = Flask(__name__)  s
+app = Flask(__name__)
 
 def connection():
     cnx = mysql.connector.connect(
@@ -13,29 +13,107 @@ def connection():
             password="Qwerty123")
     return cnx
 
-@app.route('/user_register', methods=['POST'])
-def user_register():
-    req = request.get_json()
-    cnx = connection()
-    
-    name = req['name']
-    login = req['email']
-    password = req['password']
-
+def hash_password(password):
     password_bytes = password.encode("utf-8")
-    salt = bcrypt.gensalt()               
+    salt = bcrypt.gensalt()
     hashed = bcrypt.hashpw(password_bytes, salt)
 
-    date = (name, login, hashed.decode("utf-8"))
-    cur = cnx.cursor()
-    try:
-        rows = cur.execute('INSERT INTO `users`(`username`, `email`, `password_hash`) VALUES (%s, %s, %s)', date)
-    except:
-        return {'result': False}
-    cnx.commit()
-    cnx.close()
+    return hashed.decode("utf-8")
 
-    return {'result': True}
+
+def check_password(password, password_hash):
+    password_bytes = password.encode("utf-8")
+    hash_bytes = password_hash.encode("utf-8")
+
+    return bcrypt.checkpw(password_bytes, hash_bytes)
+
+def user_register():
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict):
+        return jsonify({
+            'result': False,
+            'message': 'Некорректные данные'
+        }), 400
+
+    name = data.get('name')
+    email = data.get('email')
+    password = data.get('password')
+
+    if not all(isinstance(value, str) for value in (name, email, password)):
+        return jsonify({
+            'result': False,
+            'message': 'Заполните все поля'
+        }), 400
+
+    name = name.strip()
+    email = email.strip().lower()
+
+    if not name or not email or not password.strip():
+        return jsonify({
+            'result': False,
+            'message': 'Заполните все поля'
+        }), 400
+
+    cnx = None
+    cur = None
+
+    try:
+        cnx = connection()
+        cur = cnx.cursor()
+
+        cur.execute(
+            'SELECT 1 FROM users WHERE email = %s',
+            (email,)
+        )
+
+        if cur.fetchone() is not None:
+            return jsonify({
+                'result': False,
+                'message': 'Пользователь с таким email уже существует'
+            }), 409
+
+        password_hash = hash_password(password)
+
+        cur.execute(
+            'INSERT INTO users (username, email, password_hash) '
+            'VALUES (%s, %s, %s)',
+            (name, email, password_hash)
+        )
+
+        cnx.commit()
+
+        return jsonify({
+            'result': True,
+            'message': 'Регистрация прошла успешно'
+        })
+
+    except mysql.connector.IntegrityError:
+        if cnx is not None:
+            cnx.rollback()
+
+        return jsonify({
+            'result': False,
+            'message': 'Пользователь с таким email уже существует'
+        }), 409
+
+    except mysql.connector.Error:
+        if cnx is not None:
+            cnx.rollback()
+
+        app.logger.exception('Ошибка при регистрации')
+
+        return jsonify({
+            'result': False,
+            'message': 'Ошибка при работе с базой данных'
+        }), 500
+
+    finally:
+        if cur is not None:
+            cur.close()
+
+        if cnx is not None:
+            cnx.close()
 
 # # Fetch one result
 # row = cur.fetchone()
@@ -46,35 +124,88 @@ def user_register():
 
 @app.route("/user_login", methods=['POST'])
 def user_login():
-    login = request.form.get('username', '').strip()
-    password = request.form.get('password_hash', '')
+    data = request.get_json(silent=True)
 
-    cnx = connection()
+    if not isinstance(data, dict):
+        return jsonify({
+            'result': False,
+            'message': 'Некорректные данные'
+        }), 400
+
+    email = data.get('email')
+    password = data.get('password')
+
+    if not isinstance(email, str) or not isinstance(password, str):
+        return jsonify({
+            'result': False,
+            'message': 'Заполните все поля'
+        }), 400
+
+    email = email.strip().lower()
+
+    if not email or not password:
+        return jsonify({
+            'result': False,
+            'message': 'Заполните все поля'
+        }), 400
+
+    cnx = None
+    cur = None
 
     try:
+        cnx = connection()
         cur = cnx.cursor()
-        cur.execute('SELECT * FROM users WHERE email=%s AND password_hash=%s', (login,))
 
-        users = cur.fetchone()
+        cur.execute(
+            'SELECT password_hash FROM users WHERE email = %s',
+            (email,)
+        )
 
-        if user in None:
-            return "Неверный логин или пароль", 401
+        user = cur.fetchone()
 
-        password_bytes = password.encode("utf-8")
-        stored_hash = user[2].encode("utf-8")
+        if user is None:
+            return jsonify({
+                'result': False,
+                'message': 'Неверный email или пароль'
+            }), 401
 
-        if bcrypt.checkpw(password_bytes, stored_hash):
-            return "Авторизаця успешна"
-        return "Неверный логин или пароль", 401
+        password_hash = user[0]
+
+        if check_password(password, password_hash):
+            return jsonify({
+                'result': True,
+                'message': 'Авторизация прошла успешно'
+            })
+
+        return jsonify({
+            'result': False,
+            'message': 'Неверный email или пароль'
+        }), 401
+
+    except mysql.connector.Error:
+        app.logger.exception('Ошибка при авторизации')
+
+        return jsonify({
+            'result': False,
+            'message': 'Ошибка при работе с базой данных'
+        }), 500
 
     finally:
-        cnx.close()
+        if cur is not None:
+            cur.close()
+
+        if cnx is not None:
+            cnx.close()
 
 @app.route("/")
 def registration():
     return render_template('registration.html')
 
+
 @app.route("/login")
 def login():
     return render_template('login.html')
-app.run()
+
+
+if __name__ == "__main__":
+    app.run()
