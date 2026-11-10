@@ -7,7 +7,9 @@ requires-python = ">=3.8"
 dependencies = [
     "bcrypt>=5.0.0",
     "flask>=3.0.3",
+    "huggingface-hub>=0.36.1,<1.0",
     "keyring>=25.5.0",
+    "llama-cpp-python>=0.3.36",
     "mysql-connector-python>=9.0.0",
 ]
 

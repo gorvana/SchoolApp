@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Личный кабинет</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px 0;
+        }
+
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,.1);
+            width: 100%;
+            max-width: 440px;
+        }
+
+        h2 {
+            text-align: center;
+            color: #333;
+        }
+
+        .row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .label { color: #666; }
+        .value { color: #333; font-weight: bold; }
+
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 15px;
+            text-align: center;
+            text-decoration: none;
+            box-sizing: border-box;
+            margin-top: 15px;
+        }
+
+        .btn-primary { background: #007bff; }
+        .btn-danger { background: #dc3545; }
+
+        #chat-messages {
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 10px;
+            height: 220px;
+            overflow-y: auto;
+            background: #fafafa;
+            margin-bottom: 10px;
+        }
+
+        .msg {
+            margin-bottom: 8px;
+            padding: 6px 10px;
+            border-radius: 8px;
+            max-width: 85%;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+            font-size: 14px;
+        }
+
+        .msg.user {
+            background: #007bff;
+            color: white;
+            margin-left: auto;
+            text-align: right;
+        }
+
+        .msg.bot {
+            background: #e9ecef;
+            color: #333;
+        }
+
+        #chat-input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+            resize: vertical;
+            min-height: 50px;
+            font-family: inherit;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="card">
+
+    <h2>Личный кабинет</h2>
+
+    <div class="row">
+        <span class="label">Баланс</span>
+        <span class="value">{{ user.balance }}</span>
+    </div>
+
+    <div class="row">
+        <span class="label">Имя</span>
+        <span class="value">{{ user.username }}</span>
+    </div>
+
+    <div class="row">
+        <span class="label">Email</span>
+        <span class="value">{{ user.email }}</span>
+    </div>
+
+    <a href="/transactions" class="btn btn-primary">
+        Транзакции
+    </a>
+
+    <h3>Чат с нейросетью</h3>
+
+    <div id="chat-messages"></div>
+
+    <form id="chat-form">
+        <textarea
+            id="chat-input"
+            placeholder="Ваше сообщение..."
+            required
+        ></textarea>
+
+        <button type="submit" class="btn btn-primary">
+            Отправить
+        </button>
+    </form>
+
+    <form action="/logout" method="post">
+        <button type="submit" class="btn btn-danger">
+            Выйти
+        </button>
+    </form>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.js"></script>
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+
+</body>
+</html>

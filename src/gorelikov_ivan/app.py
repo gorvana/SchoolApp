@@ -1,8 +1,22 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, session, redirect
 import bcrypt
+from llama_cpp import Llama
 import mysql.connector
 
+REPO_ID = "bartowski/Qwen2.5-0.5B-Instruct-GGUF"
+FILENAME = "Qwen2.5-0.5B-Instruct-Q4_K_M.gguf"
+
+print(f"Загрузка модели {FILENAME} из {REPO_ID}...")
+llm = Llama.from_pretrained(
+    repo_id=REPO_ID,
+    filename=FILENAME,
+    n_ctx=2048,
+    verbose=False
+)
+print("Модель успешно загружена.")
+
 app = Flask(__name__)
+app.secret_key = "1581"
 
 def connection():
     cnx = mysql.connector.connect(
@@ -20,13 +34,13 @@ def hash_password(password):
 
     return hashed.decode("utf-8")
 
-
 def check_password(password, password_hash):
     password_bytes = password.encode("utf-8")
     hash_bytes = password_hash.encode("utf-8")
 
     return bcrypt.checkpw(password_bytes, hash_bytes)
 
+@app.route("/user_register", methods=['POST'])
 def user_register():
     data = request.get_json(silent=True)
 
@@ -101,8 +115,6 @@ def user_register():
         if cnx is not None:
             cnx.rollback()
 
-        app.logger.exception('Ошибка при регистрации')
-
         return jsonify({
             'result': False,
             'message': 'Ошибка при работе с базой данных'
@@ -164,14 +176,17 @@ def user_login():
         user = cur.fetchone()
 
         if user is None:
+            print("aaa")
             return jsonify({
                 'result': False,
                 'message': 'Неверный email или пароль'
             }), 401
 
-        password_hash = user[0]
+        if check_password(password, user['password_hash']):
+            session.clear()
+            session['user_id'] = user['id']
+            session['username'] = user['username']
 
-        if check_password(password, password_hash):
             return jsonify({
                 'result': True,
                 'message': 'Авторизация прошла успешно'
@@ -205,6 +220,97 @@ def registration():
 @app.route("/login")
 def login():
     return render_template('login.html')
+
+@app.route('/api/chat', methods=['POST'])
+def api_chat():
+    if 'user_id' not in session:
+        return jsonify({'error': 'не авторизован'}), 401
+
+    req = request.get_json(silent=True) or {}
+    message = (req.get('message') or '').strip()
+
+    if not message:
+        return jsonify({'error': 'пустое сообщение'}), 400
+
+    prompt = (
+        f"<|im_start|>system\n"
+        f"Ты полезный ассистент. Отвечай кратко и по-русски."
+        f"<|im_end|>\n"
+        f"<|im_start|>user\n{message}<|im_end|>\n"
+        f"<|im_start|>assistant\n"
+    )
+
+    output = llm(
+        prompt,
+        max_tokens=150,
+        temperature=0.7,
+        stop=["<|im_end|>"]
+    )
+
+    reply = output['choices'][0]['text'].strip()
+
+    return jsonify({'reply': reply})
+
+
+@app.route('/profile')
+def profile_page():
+    if 'user_id' not in session:
+        return redirect('/login')
+
+    cnx = connection()
+
+    try:
+        cur = cnx.cursor(dictionary=True)
+
+        cur.execute(
+            'SELECT id, username, email, balance FROM users WHERE id = %s',
+            (session['user_id'],)
+        )
+
+        user = cur.fetchone()
+
+    finally:
+        cur.close()
+        cnx.close()
+
+    if not user:
+        session.clear()
+        return redirect('/login')
+
+    return render_template('profile.html', user=user)
+
+
+@app.route('/logout', methods=['POST'])
+def api_logout():
+    session.clear()
+    return redirect('/login')
+
+
+@app.route('/transactions')
+def transactions_page():
+    if 'user_id' not in session:
+        return redirect('/login')
+
+    cnx = connection()
+
+    try:
+        cur = cnx.cursor(dictionary=True)
+
+        cur.execute(
+            '''SELECT id, amount, type, cost, description, balance_after, created_at
+               FROM transactions
+               WHERE user_id = %s
+               ORDER BY created_at DESC, id DESC''',
+            (session['user_id'],)
+        )
+
+        transactions = cur.fetchall()
+
+    finally:
+        cur.close()
+        cnx.close()
+
+    return render_template('transactions.html', transactions=transactions)
 
 
 if __name__ == "__main__":
